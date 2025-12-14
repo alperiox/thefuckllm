@@ -5,14 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "cognee>=0.4.1",
-    "ddgs>=9.9.3",
-    "duckduckgo-search>=8.1.1",
-    "langchain-community>=0.4.1",
-    "langchain-ollama>=1.0.0",
-    "langgraph>=1.0.4",
-    "litellm>=1.80.7",
-    "markdownify>=1.2.2",
-    "requests>=2.31.0",
-    "smolagents>=1.23.0",
+    "fastembed>=0.7.4",
+    "huggingface-hub>=1.2.3",
+    "llama-cpp-python>=0.3.16",
+    "numpy>=2.3.5",
+    "platformdirs>=4.5.1",
+    "typer[all]>=0.20.0",
 ]
