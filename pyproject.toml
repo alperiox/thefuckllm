@@ -1,7 +1,7 @@
 [project]
 name = "thefuckllm"
 version = "0.1.0"
-description = "Add your description here"
+description = "CLI helper powered by local LLMs"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,3 +12,9 @@ dependencies = [
     "platformdirs>=4.5.1",
     "typer[all]>=0.20.0",
 ]
+
+[project.scripts]
+tfllm = "thefuckllm.cli:main"
+
+[tool.uv]
+package = true
