@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from .engine import get_engine
 from .shells import get_shell
@@ -18,6 +19,9 @@ app = typer.Typer(
     help="CLI helper powered by local LLMs",
     no_args_is_help=True,
 )
+config_app = typer.Typer(help="Configuration management")
+app.add_typer(config_app, name="config")
+
 console = Console()
 
 
@@ -289,6 +293,173 @@ def download():
         console.print(f"[green]Q4_K_M ready:[/green] {path}")
 
     console.print("[bold green]All models downloaded![/bold green]")
+
+
+# ============================================================================
+# Config Commands
+# ============================================================================
+
+
+@config_app.command("set-provider")
+def config_set_provider(
+    provider: Annotated[
+        str, typer.Argument(help="Provider: local, openai, anthropic, gemini, openrouter")
+    ],
+):
+    """Set the active LLM provider.
+
+    Examples:
+        tfllm config set-provider openai
+        tfllm config set-provider local
+    """
+    from .config import ProviderType, get_config, reload_config
+
+    try:
+        provider_type = ProviderType(provider.lower())
+    except ValueError:
+        console.print(f"[red]Unknown provider: {provider}[/red]")
+        console.print(f"Available providers: {[p.value for p in ProviderType]}")
+        raise typer.Exit(1)
+
+    # Check for API key if remote provider
+    config = get_config()
+    if provider_type != ProviderType.LOCAL:
+        if not config.has_api_key(provider_type):
+            from .config import API_KEY_ENV_VARS
+
+            env_var = API_KEY_ENV_VARS.get(provider_type, "")
+            console.print(
+                f"[yellow]Warning: No API key found for {provider}.[/yellow]"
+            )
+            console.print(f"Set the {env_var} environment variable.")
+
+    config.active_provider = provider_type
+    config.save()
+    reload_config()
+
+    # Notify server if running
+    if client.is_server_running():
+        response = client.reload_provider()
+        if response.get("success"):
+            console.print("[dim]Server notified of provider change.[/dim]")
+
+    console.print(f"[green]Active provider set to: {provider}[/green]")
+
+
+@config_app.command("set-model")
+def config_set_model(
+    model: Annotated[
+        str,
+        typer.Argument(help="Model identifier or alias (e.g., sonnet, gpt-4o, haiku)"),
+    ],
+):
+    """Set the active model for the current provider.
+
+    You can use short aliases like 'sonnet', 'haiku', 'gpt4o', etc.
+    Run 'tfllm config list-models' to see all available models and aliases.
+
+    Examples:
+        tfllm config set-model sonnet       # -> claude-3-5-sonnet-20241022
+        tfllm config set-model gpt-4o
+        tfllm config set-model haiku        # -> claude-3-5-haiku-20241022
+        tfllm config set-model q4           # -> q4_k_m (for local provider)
+    """
+    from .config import get_config, reload_config, resolve_model_alias
+
+    config = get_config()
+
+    # Resolve alias to full model name
+    resolved_model = resolve_model_alias(model)
+
+    config.active_model = model  # Store original input
+    config.save()
+    reload_config()
+
+    # Notify server if running
+    if client.is_server_running():
+        response = client.reload_provider()
+        if response.get("success"):
+            console.print("[dim]Server notified of model change.[/dim]")
+
+    if resolved_model != model:
+        console.print(f"[green]Active model set to: {model} -> {resolved_model}[/green]")
+    else:
+        console.print(f"[green]Active model set to: {model}[/green]")
+
+
+@config_app.command("show")
+def config_show():
+    """Show current configuration."""
+    from .config import API_KEY_ENV_VARS, ProviderType, get_config, resolve_model_alias
+
+    config = get_config()
+
+    console.print("[bold]Current Configuration:[/bold]")
+    console.print(f"  Active provider: [cyan]{config.active_provider.value}[/cyan]")
+
+    # Show both stored model and resolved model if different
+    stored_model = config.active_model or "(default)"
+    resolved_model = config.get_active_model()
+    if config.active_model and resolve_model_alias(config.active_model) != config.active_model:
+        console.print(f"  Active model: [cyan]{stored_model}[/cyan] -> [cyan]{resolved_model}[/cyan]")
+    else:
+        console.print(f"  Active model: [cyan]{resolved_model}[/cyan]")
+
+    console.print(f"  Local quantization: [cyan]{config.local_quantization}[/cyan]")
+    console.print(f"  Config file: [dim]{config.config_path()}[/dim]")
+
+    console.print("\n[bold]API Keys:[/bold]")
+    for provider in ProviderType:
+        if provider == ProviderType.LOCAL:
+            continue
+        env_var = API_KEY_ENV_VARS.get(provider, "")
+        has_key = config.has_api_key(provider)
+        status = "[green]set[/green]" if has_key else "[red]not set[/red]"
+        console.print(f"  {provider.value}: {status} ({env_var})")
+
+
+@config_app.command("list-models")
+def config_list_models():
+    """List available models per provider (fetched dynamically from LiteLLM)."""
+    from .config import DEFAULT_MODELS, MODEL_ALIASES, ProviderType, get_available_models
+
+    # Models table
+    table = Table(title="Available Models (from LiteLLM)")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Model", style="white")
+    table.add_column("Default", style="green")
+
+    for provider in ProviderType:
+        models = get_available_models(provider)
+        default = DEFAULT_MODELS.get(provider, "")
+        for i, model in enumerate(models):
+            is_default = "yes" if model == default else ""
+            # Only show provider name for first row
+            provider_name = provider.value if i == 0 else ""
+            table.add_row(provider_name, model, is_default)
+
+    console.print(table)
+
+    # Aliases table
+    console.print("\n[bold]Model Aliases[/bold] (use these as shortcuts):")
+    alias_table = Table(show_header=True)
+    alias_table.add_column("Alias", style="yellow")
+    alias_table.add_column("Resolves to", style="white")
+
+    # Group aliases by target model for cleaner display
+    alias_groups = {}
+    for alias, target in MODEL_ALIASES.items():
+        if target not in alias_groups:
+            alias_groups[target] = []
+        alias_groups[target].append(alias)
+
+    for target, aliases in sorted(alias_groups.items()):
+        alias_table.add_row(", ".join(sorted(aliases)), target)
+
+    console.print(alias_table)
+
+    console.print("\n[dim]Models fetched dynamically from LiteLLM. For OpenRouter, use any model from https://openrouter.ai/docs#models[/dim]")
+    console.print("[dim]Example: tfllm config set-model sonnet[/dim]")
 
 
 def main():

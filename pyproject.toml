@@ -7,9 +7,11 @@ requires-python = ">=3.12"
 dependencies = [
     "fastembed>=0.7.4",
     "huggingface-hub>=1.2.3",
+    "litellm>=1.55.0",
     "llama-cpp-python>=0.3.16",
     "numpy>=2.3.5",
     "platformdirs>=4.5.1",
+    "tomli-w>=1.0.0",
     "typer[all]>=0.20.0",
 ]
 

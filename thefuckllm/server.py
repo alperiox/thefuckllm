@@ -12,8 +12,9 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from platformdirs import user_cache_dir
 
+from .config import ProviderType, get_config, reload_config
 from .engine import InferenceEngine
-from .models import get_llm
+from .providers import ProviderFactory, get_provider
 
 # Server configuration
 CACHE_DIR = Path(user_cache_dir("thefuckllm"))
@@ -40,9 +41,17 @@ class Server:
         self.socket: socket.socket | None = None
 
     def preload_models(self):
-        """Preload all models for fast inference."""
-        print("Loading LLM model...")
-        get_llm()  # This caches the model
+        """Preload models for fast inference (smart loading)."""
+        config = get_config()
+
+        # Only preload local model if using local provider
+        if config.active_provider == ProviderType.LOCAL:
+            print("Loading local LLM model...")
+            provider = get_provider()
+            provider.load()
+        else:
+            print(f"Using remote provider: {config.active_provider.value}")
+            # Remote providers don't need preloading
 
         print("Loading embedding model...")
         self.engine = InferenceEngine()
@@ -76,6 +85,18 @@ class Server:
 
             elif action == "ping":
                 return {"success": True, "result": "pong"}
+
+            elif action == "reload_provider":
+                # Reload config and provider when settings change
+                reload_config()
+                ProviderFactory.clear()
+                config = get_config()
+                if config.active_provider == ProviderType.LOCAL:
+                    get_provider().load()
+                return {
+                    "success": True,
+                    "result": f"Provider reloaded: {config.active_provider.value}",
+                }
 
             else:
                 return {"success": False, "error": f"Unknown action: {action}"}

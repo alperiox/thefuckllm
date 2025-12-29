@@ -129,3 +129,17 @@ def get_server_pid() -> int | None:
         return int(pid_file.read_text().strip())
     except ValueError:
         return None
+
+
+def reload_provider() -> dict:
+    """Signal server to reload the LLM provider.
+
+    Call this after changing the config (provider, model, etc.)
+    to make the server use the new settings.
+
+    Returns:
+        Response dict with "success" and "result" or "error"
+    """
+    if not is_server_running():
+        return {"success": False, "error": "Server not running"}
+    return send_request("reload_provider")

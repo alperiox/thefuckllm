@@ -1,7 +1,11 @@
 """Inference engine for CLI assistance."""
 
-from .models import get_llm
-from .prompts import command_extraction_prompt, ask_prompt, fix_prompt
+from .prompts import (
+    CLI_EXPERT_SYSTEM,
+    COMMAND_EXTRACTOR_SYSTEM,
+    FIX_COMMAND_SYSTEM,
+)
+from .providers import Message, get_provider
 from .retriever import ContextRetriever
 
 
@@ -20,10 +24,13 @@ class InferenceEngine:
 
     def extract_command(self, query: str) -> str:
         """Extract CLI tool name from query."""
-        llm = get_llm()
-        prompt = command_extraction_prompt(query)
-        result = llm(prompt, max_tokens=10, stop=["<|im_end|>"], echo=False)
-        return result["choices"][0]["text"].strip()
+        provider = get_provider()
+        messages = [
+            Message(role="system", content=COMMAND_EXTRACTOR_SYSTEM),
+            Message(role="user", content=f"Extract the CLI tool name from: {query}"),
+        ]
+        response = provider.complete(messages, max_tokens=10)
+        return response.content.strip()
 
     def ask(self, query: str, verbose: bool = False) -> str:
         """Answer a CLI question."""
@@ -36,10 +43,14 @@ class InferenceEngine:
         context = self.retriever.get(command, query, verbose=verbose)
 
         # Generate answer
-        llm = get_llm()
-        prompt = ask_prompt(query, context)
-        result = llm(prompt, max_tokens=512, stop=["<|im_end|>"], echo=False)
-        return result["choices"][0]["text"].strip()
+        provider = get_provider()
+        context_text = "\n\n".join(context)
+        messages = [
+            Message(role="system", content=CLI_EXPERT_SYSTEM),
+            Message(role="user", content=f"Context:\n{context_text}\n\nQuestion: {query}"),
+        ]
+        response = provider.complete(messages, max_tokens=512)
+        return response.content.strip()
 
     def fix(
         self,
@@ -67,10 +78,17 @@ class InferenceEngine:
                 pass  # Proceed without context if retrieval fails
 
         # Generate fix
-        llm = get_llm()
-        prompt = fix_prompt(failed_command, exit_code, stdout, stderr, context)
-        result = llm(prompt, max_tokens=256, stop=["<|im_end|>", "\n\n"], echo=False)
-        return result["choices"][0]["text"].strip()
+        provider = get_provider()
+        user_msg = f"Fix this command: {failed_command}"
+        if stderr:
+            user_msg += f"\nError: {stderr[:500]}"
+
+        messages = [
+            Message(role="system", content=FIX_COMMAND_SYSTEM),
+            Message(role="user", content=user_msg),
+        ]
+        response = provider.complete(messages, max_tokens=256, stop=["\n\n"])
+        return response.content.strip()
 
 
 # Singleton instance

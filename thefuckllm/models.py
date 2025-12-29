@@ -43,3 +43,8 @@ def get_llm(quantization: ModelQuantization = "q8_0") -> Llama:
         n_gpu_layers=-1,
         verbose=False,
     )
+
+
+def clear_model_cache() -> None:
+    """Clear the cached model to free memory."""
+    get_llm.cache_clear()

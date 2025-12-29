@@ -6,10 +6,12 @@ A CLI helper that fixes your command-line mistakes using local LLMs. Inspired by
 
 - **Fix failed commands** - Type `fuck` after a failed command to get a fix suggestion
 - **Ask CLI questions** - Get answers about any command-line tool based on its man page
-- **Runs locally** - No API keys, no cloud services, complete privacy
+- **Multiple LLM providers** - Use local models or cloud APIs (OpenAI, Anthropic, Gemini, OpenRouter)
+- **Runs locally by default** - No API keys required, complete privacy with local models
 - **Smart context retrieval** - Uses semantic search over man pages with fallback to tldr and cheat.sh
 - **Shell integration** - Works with bash, zsh, and fish
 - **Background server** - Keep the model loaded for instant responses
+- **Hot-swap providers** - Switch between models and providers at any time
 
 ## Installation
 
@@ -81,6 +83,10 @@ $ fuck -e  # Automatically prompts to execute the fix
 | `tfllm stop` | Stop the background server |
 | `tfllm status` | Check if server is running |
 | `tfllm download` | Pre-download the LLM models |
+| `tfllm config show` | Show current configuration |
+| `tfllm config set-provider <provider>` | Switch LLM provider |
+| `tfllm config set-model <model>` | Set the model to use |
+| `tfllm config list-models` | List available models |
 
 ## Background Server
 
@@ -98,6 +104,84 @@ tfllm stop
 ```
 
 Without the server, each command loads the model fresh (slower first response). With the server running, responses are near-instant.
+
+## Using Different Providers
+
+By default, thefuckllm runs entirely locally using Qwen2.5-Coder-3B. You can also use cloud-based LLM providers for potentially better results.
+
+### Supported Providers
+
+| Provider | Environment Variable | Example Models |
+|----------|---------------------|----------------|
+| Local (default) | - | q4_k_m, q8_0 |
+| OpenAI | `OPENAI_API_KEY` | gpt-4o, gpt-4o-mini, o1-mini |
+| Anthropic | `ANTHROPIC_API_KEY` | claude-3-5-sonnet-20241022, claude-3-haiku-20240307 |
+| Google Gemini | `GEMINI_API_KEY` | gemini-1.5-flash, gemini-1.5-pro |
+| OpenRouter | `OPENROUTER_API_KEY` | Any model on openrouter.ai |
+
+### Switching Providers
+
+```bash
+# Set your API key
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Switch to Anthropic
+tfllm config set-provider anthropic
+
+# Use a model (short aliases work!)
+tfllm config set-model sonnet    # -> claude-3-5-sonnet-20241022
+tfllm config set-model haiku     # -> claude-3-5-haiku-20241022
+tfllm config set-model opus      # -> claude-3-opus-20240229
+
+# Check current configuration
+tfllm config show
+
+# Switch back to local
+tfllm config set-provider local
+```
+
+### Model Aliases
+
+You can use short aliases instead of full model names:
+
+| Alias | Resolves to |
+|-------|-------------|
+| `sonnet` | claude-3-5-sonnet-20241022 |
+| `haiku` | claude-3-5-haiku-20241022 |
+| `opus` | claude-3-opus-20240229 |
+| `gpt4o`, `4o` | gpt-4o |
+| `4o-mini` | gpt-4o-mini |
+| `gemini`, `flash` | gemini/gemini-1.5-flash |
+| `gemini-pro` | gemini/gemini-1.5-pro |
+| `q4`, `q8` | q4_k_m, q8_0 (local) |
+
+Run `tfllm config list-models` to see all available models and aliases.
+
+### Using OpenRouter
+
+OpenRouter provides access to many models from various providers through a single API:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+tfllm config set-provider openrouter
+tfllm config set-model openrouter/openai/gpt-4o-mini
+```
+
+See available models at [openrouter.ai/docs#models](https://openrouter.ai/docs#models).
+
+### Configuration
+
+Configuration is stored in `~/.config/thefuckllm/config.toml` (or platform equivalent). API keys are read from environment variables for security.
+
+```bash
+# View all available models
+tfllm config list-models
+
+# Show current settings
+tfllm config show
+```
+
+When you change the provider or model, the background server (if running) is automatically notified to reload.
 
 ## How It Works
 
@@ -130,6 +214,7 @@ Models are cached in `~/.cache/thefuckllm/` (or platform equivalent).
 ## Dependencies
 
 - `llama-cpp-python` - Local GGUF model inference
+- `litellm` - Unified API for multiple LLM providers
 - `fastembed` - Text embeddings for semantic retrieval
 - `huggingface-hub` - Model downloading
 - `typer` - CLI framework
